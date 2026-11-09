@@ -11,11 +11,12 @@ for(const width of [600,768,375,320]){
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:4173/circle-tools/preview.html',{waitUntil:'networkidle'});
  await page.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.querySelectorAll('td.art')].map(td=>new Promise((resolve,reject)=>{const url=getComputedStyle(td).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1];if(!url)return reject(new Error('Missing decorative background'));const im=new Image();im.onload=resolve;im.onerror=()=>reject(new Error('Artwork failed to load'));im.src=url;})));});
- const audit=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,logoLoaded:[...document.images].every(x=>x.complete&&x.naturalWidth>0),coupon:document.querySelector('.coupon').innerText,cta:document.querySelector('.cta').href,sections:[...document.querySelectorAll('td.art')].map(td=>{const r=td.getBoundingClientRect();const texts=[...td.querySelectorAll('h1,h2,p')].map(e=>{const b=e.getBoundingClientRect();return {text:e.innerText,left:b.left,right:b.right,bottom:b.bottom};});return {name:td.className,top:r.top,bottom:r.bottom,texts};})}));
+ const audit=await page.evaluate(()=>({terms:document.querySelector('.coupon-terms')?.innerText,width:innerWidth,scrollWidth:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,logoLoaded:[...document.images].every(x=>x.complete&&x.naturalWidth>0),coupon:document.querySelector('.coupon').innerText,cta:document.querySelector('.cta').href,sections:[...document.querySelectorAll('td.art')].map(td=>{const r=td.getBoundingClientRect();const texts=[...td.querySelectorAll('h1,h2,p')].map(e=>{const b=e.getBoundingClientRect();return {text:e.innerText,left:b.left,right:b.right,bottom:b.bottom};});return {name:td.className,top:r.top,bottom:r.bottom,texts};})}));
  const issues=[];
  if(audit.scrollWidth>width)issues.push('Horizontal overflow');
+ if(!audit.terms?.includes('9 November 2027'))issues.push('Coupon expiry missing');
  if(!audit.logoLoaded)issues.push('Logo did not load');
- if(audit.coupon!=='PREVIEW-ONLY')issues.push('Sample coupon missing');
+ if(audit.coupon!=='CIRCLE10')issues.push('Approved coupon missing');
  if(audit.cta!=='https://sisireimagines.etsy.com/')issues.push('Wrong shop URL');
  for(const s of audit.sections)for(const t of s.texts){if(t.bottom>s.bottom+1)issues.push(`${s.name}: text below section`);if(t.left<0||t.right>width+1)issues.push(`${s.name}: text outside viewport`);}
  issues.push(...errors);
