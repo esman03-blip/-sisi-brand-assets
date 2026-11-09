@@ -6,7 +6,7 @@ await fs.mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const results=[];
 let failed=false;
-for(const width of [600,768,375,320]){
+for(const width of [600,768,599,481,414,375,320]){
  const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:4173/circle-tools/preview.html',{waitUntil:'networkidle'});
@@ -62,6 +62,21 @@ for (const [fixture,expectedPass] of [['qa/before-inline-fix.html',false],['prev
  failed ||=!checkPass;await page.close();
 }
 results.push({check:'CSS-loss reproduces old title collision and inline fallback prevents it',details:cssLossResults,pass:cssLossResults.every(x=>x.pass)});
+
+
+for(const width of [320,375,414]){
+ const page=await browser.newPage({viewport:{width,height:900}});
+ await page.goto('http://127.0.0.1:4173/circle-tools/preview.html',{waitUntil:'networkidle'});
+ await page.locator('style').evaluateAll(nodes=>nodes.forEach(n=>n.remove()));
+ const audit=await page.evaluate(()=>{
+  const hero=document.querySelector('.hero-cell').getBoundingClientRect(),heading=document.querySelector('h1').getBoundingClientRect();
+  const texts=[...document.querySelectorAll('h1,h2,p,.cta')].map(el=>{const r=el.getBoundingClientRect();return {text:el.innerText,left:r.left,right:r.right};});
+  return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,headingFont:getComputedStyle(document.querySelector('h1')).fontSize,headingBottom:heading.bottom-hero.top,heroHeight:hero.height,texts};
+ });
+ const pass=audit.scrollWidth<=width&&parseFloat(audit.headingFont)<=45&&audit.headingBottom<=audit.heroHeight*.79&&audit.texts.every(t=>t.left>=0&&t.right<=width+1);
+ await page.screenshot({path:path.join(out,'circle-inline-mobile-'+width+'px.png'),fullPage:true});
+ results.push({check:'Narrow layout without head CSS',width,...audit,pass});failed ||=!pass;await page.close();
+}
 
 await browser.close();
 await fs.writeFile(path.join(out,'results.json'),JSON.stringify({scope:'Chromium HTTP layout tests; not real inbox or coupon acceptance',results},null,2));
