@@ -65,12 +65,12 @@ results.push({check:'CSS-loss reproduces old title collision and inline fallback
 
 
 const importHtml=await fs.readFile('circle-tools/tools-welcome.email.html','utf8');
-const styleBodies=[...importHtml.matchAll(/<style[^>]*>([\\s\\S]*?)<\\/style>/g)].map(m=>m[1]);
+const styleBodies=[...importHtml.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1]);
 if(styleBodies.some(css=>css.includes('}}')||css.includes('&#125;')))throw new Error('Adjacent style braces can be entity-encoded during provider sending');
 for(const width of [375,600]){
  const page=await browser.newPage({viewport:{width,height:900}});
  let html=await fs.readFile('circle-tools/preview.html','utf8');
- html=html.replace(/<style([^>]*)>([\\s\\S]*?)<\\/style>/g,(_all,attrs,css)=>'<style'+attrs+'>'+css.replace(/\\}\\}/g,'&#125;&#125;')+'</style>');
+ html=html.replace(/<style([^>]*)>([\s\S]*?)<\/style>/g,(_all,attrs,css)=>'<style'+attrs+'>'+css.replace(/\}\}/g,'&#125;&#125;')+'</style>');
  await page.setContent(html,{waitUntil:'networkidle'});
  const metrics=await page.evaluate(()=>({font:getComputedStyle(document.querySelector('h1')).fontSize,copy:getComputedStyle(document.querySelector('.copy')).fontSize,logo:document.querySelector('.logo').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth>innerWidth}));
  const pass=metrics.font===(width===600?'68px':'45px')&&metrics.copy===(width===600?'23px':'17px')&&metrics.logo===(width===600?208:173)&&!metrics.overflow;
