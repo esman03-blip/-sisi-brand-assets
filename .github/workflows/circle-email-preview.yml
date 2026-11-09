@@ -1,0 +1,33 @@
+name: Circle welcome responsive preview
+on:
+  push:
+    branches: [newsletter/circle-tools-2026-11-09]
+    paths: ['circle-tools/**', '.github/workflows/circle-email-preview.yml']
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install preview tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Render and inspect responsive email over HTTP
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/circle-http.log 2>&1 &
+          for attempt in $(seq 1 15); do curl -sf http://127.0.0.1:4173/circle-tools/preview.html >/dev/null && break; sleep 1; done
+          node circle-tools/render-preview.mjs
+      - name: Save exact render evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circle-welcome-responsive-previews
+          path: circle-tools/qa-output/
+          retention-days: 7
+          if-no-files-found: error
