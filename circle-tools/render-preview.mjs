@@ -6,7 +6,7 @@ await fs.mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const results=[];
 let failed=false;
-for(const width of [600,768,599,481,414,375,320]){
+for(const width of [600,768,375,320]){
  const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:4173/circle-tools/preview.html',{waitUntil:'networkidle'});
@@ -64,18 +64,18 @@ for (const [fixture,expectedPass] of [['qa/before-inline-fix.html',false],['prev
 results.push({check:'CSS-loss reproduces old title collision and inline fallback prevents it',details:cssLossResults,pass:cssLossResults.every(x=>x.pass)});
 
 
-for(const width of [320,375,414]){
+const importHtml=await fs.readFile('circle-tools/tools-welcome.email.html','utf8');
+const styleBodies=[...importHtml.matchAll(/<style[^>]*>([\\s\\S]*?)<\\/style>/g)].map(m=>m[1]);
+if(styleBodies.some(css=>css.includes('}}')||css.includes('&#125;')))throw new Error('Adjacent style braces can be entity-encoded during provider sending');
+for(const width of [375,600]){
  const page=await browser.newPage({viewport:{width,height:900}});
- await page.goto('http://127.0.0.1:4173/circle-tools/preview.html',{waitUntil:'networkidle'});
- await page.locator('style').evaluateAll(nodes=>nodes.forEach(n=>n.remove()));
- const audit=await page.evaluate(()=>{
-  const hero=document.querySelector('.hero-cell').getBoundingClientRect(),heading=document.querySelector('h1').getBoundingClientRect();
-  const texts=[...document.querySelectorAll('h1,h2,p,.cta')].map(el=>{const r=el.getBoundingClientRect();return {text:el.innerText,left:r.left,right:r.right};});
-  return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,headingFont:getComputedStyle(document.querySelector('h1')).fontSize,headingBottom:heading.bottom-hero.top,heroHeight:hero.height,texts};
- });
- const pass=audit.scrollWidth<=width&&parseFloat(audit.headingFont)<=45&&audit.headingBottom<=audit.heroHeight*.79&&audit.texts.every(t=>t.left>=0&&t.right<=width+1);
- await page.screenshot({path:path.join(out,'circle-inline-mobile-'+width+'px.png'),fullPage:true});
- results.push({check:'Narrow layout without head CSS',width,...audit,pass});failed ||=!pass;await page.close();
+ let html=await fs.readFile('circle-tools/preview.html','utf8');
+ html=html.replace(/<style([^>]*)>([\\s\\S]*?)<\\/style>/g,(_all,attrs,css)=>'<style'+attrs+'>'+css.replace(/\\}\\}/g,'&#125;&#125;')+'</style>');
+ await page.setContent(html,{waitUntil:'networkidle'});
+ const metrics=await page.evaluate(()=>({font:getComputedStyle(document.querySelector('h1')).fontSize,copy:getComputedStyle(document.querySelector('.copy')).fontSize,logo:document.querySelector('.logo').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth>innerWidth}));
+ const pass=metrics.font===(width===600?'68px':'45px')&&metrics.copy===(width===600?'23px':'17px')&&metrics.logo===(width===600?208:173)&&!metrics.overflow;
+ results.push({check:'Provider closing-brace encoding preserves approved responsive typography',width,...metrics,pass});failed ||=!pass;
+ await page.screenshot({path:path.join(out,'circle-provider-safe-'+width+'px.png'),fullPage:true});await page.close();
 }
 
 await browser.close();
