@@ -40,7 +40,30 @@ await long.locator('.coupon').evaluate(el=>el.textContent='CIRCLE-ABCDEFGHIJKLMN
 const longPass=await long.evaluate(()=>document.documentElement.scrollWidth===innerWidth);
 await long.screenshot({path:path.join(out,'circle-320px-long-coupon.png'),fullPage:true});
 results.push({check:'Long sample coupon at 320px',pass:longPass});failed ||=!longPass;
-await long.close();await browser.close();
+await long.close();
+
+// Reproduce the reported Gmail symptom by removing head CSS, then verify the inline fallback.
+// This is a controlled CSS-loss regression; actual Gmail still needs a fresh test send.
+const cssLossResults=[];
+for (const [fixture,expectedPass] of [['qa/before-inline-fix.html',false],['preview.html',true]]) {
+ const page=await browser.newPage({viewport:{width:600,height:900}});
+ await page.goto('http://127.0.0.1:4173/circle-tools/'+fixture,{waitUntil:'networkidle'});
+ await page.locator('style').evaluateAll(nodes=>nodes.forEach(n=>n.remove()));
+ const metrics=await page.evaluate(()=>{
+  const hero=document.querySelector('.hero-cell').getBoundingClientRect();
+  const heading=document.querySelector('h1').getBoundingClientRect();
+  const logo=document.querySelector('.logo').getBoundingClientRect();
+  return {headingBottom:heading.bottom-hero.top,heroHeight:hero.height,logoTop:logo.top-hero.top,margin:getComputedStyle(document.querySelector('h1')).marginTop};
+ });
+ const safe=metrics.headingBottom<=330;
+ const checkPass=safe===expectedPass;
+ cssLossResults.push({fixture,expectedPass,safe,...metrics,pass:checkPass});
+ await page.screenshot({path:path.join(out,expectedPass?'circle-inline-fallback-600px.png':'circle-reproduced-before-fix-600px.png'),fullPage:true});
+ failed ||=!checkPass;await page.close();
+}
+results.push({check:'CSS-loss reproduces old title collision and inline fallback prevents it',details:cssLossResults,pass:cssLossResults.every(x=>x.pass)});
+
+await browser.close();
 await fs.writeFile(path.join(out,'results.json'),JSON.stringify({scope:'Chromium HTTP layout tests; not real inbox or coupon acceptance',results},null,2));
 console.log(JSON.stringify(results.map(x=>({width:x.width,check:x.check,pass:x.pass,issues:x.issues})),null,2));
 if(failed)process.exitCode=1;
